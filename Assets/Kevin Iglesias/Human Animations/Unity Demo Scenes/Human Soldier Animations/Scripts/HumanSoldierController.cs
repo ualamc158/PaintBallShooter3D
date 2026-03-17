@@ -1,164 +1,177 @@
-// -- Human Soldier Animations 2.0 | Kevin Iglesias --
-// This script is designed to showcase the animations included in the Unity demo scene for this asset.
-// You can freely edit, expand, and repurpose it as needed. To preserve your custom changes when updating
-// to future versions, it is recommended to work from a duplicate of this script.
-
-// Contact Support: support@keviniglesias.com
-
 using UnityEngine;
-using System.Collections;
+using UnityEngine.AI;
 
-namespace KevinIglesias
+public class HumanSoldierController : MonoBehaviour
 {
-    public enum SoldierWeapons
-    {
-        None,
-        AssaultRifle,
-        Bazooka,
-        Rifle,
-        Gun,
-        DualGun
-    }
-    
-    public enum SoldierPosition
-    {
-        StandUp,
-        Crouch,
-        Prone
-    }
-    
-    public enum SoldierAction
-    {
-        Nothing,
-        HoldWeapon,
-        Salute,
-        WeaponChange,
-        Shoot01,
-        Shoot02,
-        Shoot03,
-        PreciseShoot01,
-        PreciseShoot02,
-        PreciseShoot03,
-        Grenade01L,
-        Grenade02L,
-        Grenade01R,
-        Grenade02R,
-        Reload,
-        Aim,
-        AimPrecise,
-        Damage01,
-        Damage02,
-        Damage03,
-        Damage04,
-        Damage05,
-        Death01,
-        Death02,
-        Death03,
-        Death04,
-        Death05,
-        ProneDeath,
-        ProneDamage,
-        Jump,
-        Roll,
-        RunSlide,
-        ChangeWeapons,
-    }
+    [Header("Estadística")]
+    public int vidasActual;
+    public int vidasMax;
+    public int puntuacionEnemigo;
 
-    public enum SoldierMovement
-    {
-        NoMovement,
-        Walk,
-        Run,
-        Sprint,
-        StrafeL,
-        StrafeR
-    }
-    
-    public enum UnsheatheWeapons
-    {
-        GetAssaultRifle,
-        GetRifle,
-        GetBazooka,
-        GetGun,
-        GetGuns
-    }
+    [Header("Movimiento y Ataque")]
+    public float rangoVision = 15f; // NUEVO: Si estás más lejos de esto, se queda quieto
+    public float rangoAtaque = 5f;  // Distancia para disparar
 
-    public class HumanSoldierController : MonoBehaviour
+    private ControlArma arma;
+    private GameObject objetivo;
+    private NavMeshAgent agente;
+
+    // --- VARIABLES PARA ANIMACIÓN ---
+    private Animator anim;
+    private bool estaMuerto = false;
+
+    // Estados para controlar las animaciones y no lanzar Triggers repetidos
+    private enum EstadoEnemigo { Reposo, Perseguidor, Atacando }
+    private EstadoEnemigo estadoActual = EstadoEnemigo.Reposo;
+
+    void Start()
     {
-        public Animator animator;
-        
-        public SoldierWeapons equippedWeapon;
-        
-        public SoldierPosition position;
-        
-        public SoldierAction action;
-        
-        public SoldierMovement movement;
+        arma = GetComponent<ControlArma>();
+        agente = GetComponent<NavMeshAgent>();
+        anim = GetComponent<Animator>();
 
-        public GameObject[] weapons;
-        
-        private IEnumerator changingWeaponsCoroutine;
-        private int currentWeapon = 0;
+        objetivo = GameObject.FindGameObjectWithTag("Jugador");
 
-        void Update()
+        // Postura inicial
+        if (anim != null)
         {
-            animator.SetTrigger(equippedWeapon.ToString());
-            
-            animator.SetTrigger(position.ToString());
-            
-            if(action != SoldierAction.Nothing && action != SoldierAction.ChangeWeapons)
-            {
-                animator.SetTrigger(action.ToString());
-            }
-
-            if(action == SoldierAction.ChangeWeapons)
-            {
-                if(changingWeaponsCoroutine == null)
-                {
-                    changingWeaponsCoroutine = ChangingWeapons();
-                    StartCoroutine(changingWeaponsCoroutine);
-                }
-            }else{
-                if(changingWeaponsCoroutine != null)
-                {
-                    StopCoroutine(changingWeaponsCoroutine);
-                    changingWeaponsCoroutine = null;
-                }
-            }
-
-            animator.SetTrigger(movement.ToString());
+            anim.SetTrigger("Gun");
+            anim.SetTrigger("StandUp");
+            anim.SetTrigger("NoMovement"); // Empieza quieto
         }
-        
-        private IEnumerator ChangingWeapons()
+    }
+
+    private void Update()
+    {
+        if (estaMuerto || objetivo == null) return;
+
+        float distancia = Vector3.Distance(transform.position, objetivo.transform.position);
+
+        if (distancia > rangoVision)
         {
-            currentWeapon++;
-            
-            if(currentWeapon > 4)
-            {
-                currentWeapon = 0;
-            }
-            
-            animator.SetTrigger(((UnsheatheWeapons)(currentWeapon)).ToString());
-            
-            yield return new WaitForSeconds(1.5f);
-            
-            changingWeaponsCoroutine = ChangingWeapons();
-            StartCoroutine(changingWeaponsCoroutine);
+            EstarQuieto(); // Fuera de todo rango
         }
-        
-        public void ChangeWeapon(SoldierWeapons newWeapon)
+        else if (distancia > rangoAtaque)
         {
-            for(int i = 0; i < weapons.Length; i++)
+            PerseguirObjetivo(); // En rango de visión, pero no de ataque
+        }
+        else
+        {
+            AtacarObjetivo(); // En rango de ataque
+        }
+    }
+
+    private void EstarQuieto()
+    {
+        // 1. Detener al enemigo
+        if (agente != null && agente.isOnNavMesh)
+        {
+            agente.isStopped = true;
+        }
+
+        // 2. Cambiar a animación de estar quieto apuntando/vigilando
+        if (estadoActual != EstadoEnemigo.Reposo)
+        {
+            if (anim != null)
             {
-                weapons[i].SetActive(false);
+                anim.ResetTrigger("Run");
+                anim.ResetTrigger("Shoot01");
+                anim.SetTrigger("NoMovement");
             }
-            
-            weapons[(int)newWeapon-1].SetActive(true);
-            
-            if(newWeapon == SoldierWeapons.DualGun)
+            estadoActual = EstadoEnemigo.Reposo;
+        }
+    }
+
+    private void PerseguirObjetivo()
+    {
+        // 1. Mover al enemigo usando NavMesh
+        if (agente != null && agente.isOnNavMesh)
+        {
+            agente.isStopped = false;
+            agente.SetDestination(objetivo.transform.position);
+        }
+
+        // 2. Si no estaba persiguiendo, cambiamos la animación a correr
+        if (estadoActual != EstadoEnemigo.Perseguidor)
+        {
+            if (anim != null)
             {
-                weapons[(int)SoldierWeapons.Gun-1].SetActive(true);
+                anim.ResetTrigger("NoMovement");
+                anim.ResetTrigger("Shoot01");
+                anim.SetTrigger("Run");
+            }
+            estadoActual = EstadoEnemigo.Perseguidor;
+        }
+    }
+
+    private void AtacarObjetivo()
+    {
+        // 1. Detener al enemigo
+        if (agente != null && agente.isOnNavMesh)
+        {
+            agente.isStopped = true;
+        }
+
+        // 2. Rotar para mirar al jugador
+        Vector3 direccion = (objetivo.transform.position - transform.position).normalized;
+        direccion.y = 0; // Evitar que mire al suelo o al cielo
+        transform.rotation = Quaternion.LookRotation(direccion);
+
+        // 3. Cambiar animación a quieto/apuntando si venía corriendo
+        if (estadoActual != EstadoEnemigo.Atacando)
+        {
+            if (anim != null)
+            {
+                anim.ResetTrigger("Run");
+                anim.SetTrigger("NoMovement");
+            }
+            estadoActual = EstadoEnemigo.Atacando;
+
+            // Salimos este fotograma para darle tiempo al Animator de cambiar de pose
+            return;
+        }
+
+        // 4. Lógica de Disparo
+        if (arma != null && arma.PuedeDisparar())
+        {
+            arma.Disparar();
+
+            if (anim != null)
+            {
+                anim.ResetTrigger("Run");
+                anim.ResetTrigger("NoMovement");
+                anim.SetTrigger("Shoot01"); // Hace la animación del retroceso
             }
         }
+    }
+
+    public void QuitarVidasEnemigo(int cantidad)
+    {
+        if (estaMuerto) return;
+
+        vidasActual -= cantidad;
+
+        if (vidasActual <= 0)
+        {
+            Morir();
+        }
+    }
+
+    private void Morir()
+    {
+        estaMuerto = true;
+        if (agente != null && agente.isOnNavMesh) agente.isStopped = true;
+
+        if (ControlJuego.instancia != null)
+        {
+            ControlJuego.instancia.PonerPuntuacion(puntuacionEnemigo);
+        }
+
+        if (anim != null) anim.SetTrigger("Death01");
+
+        Collider col = GetComponent<Collider>();
+        if (col != null) col.enabled = false;
+
+        Destroy(gameObject, 3f);
     }
 }
