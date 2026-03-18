@@ -15,15 +15,19 @@ public class ControlArma : MonoBehaviour
     private float ultimoTiempoDisparo;
     private bool esJugador;
 
-
     private void Awake()
     {
-        if(transform.tag == "Jugador")
+        // NUEVO: Ahora el arma mira si su "Padre" o "Abuelo" es el Jugador
+        if (GetComponentInParent<ControlJugador>() != null)
         {
             esJugador = true;
         }
-        balaPool = GetComponent<PoolObjetos>();
+        else
+        {
+            esJugador = false;
+        }
 
+        balaPool = GetComponent<PoolObjetos>();
     }
 
     public bool PuedeDisparar()
@@ -49,13 +53,15 @@ public class ControlArma : MonoBehaviour
         GameObject bala = balaPool.getObjeto();
         bala.transform.position = puntoSalida.position;
         bala.transform.rotation = puntoSalida.rotation;
-        
+
         bala.GetComponent<Rigidbody>().linearVelocity = puntoSalida.forward * velocidadBala;
 
-        if(esJugador)
+        // Si es el jugador quien dispara, actualizamos el texto del HUD
+        if (esJugador)
         {
             ControlHUD.instancia.actualizarBalasTexto(municionActual, municionMax);
         }
-    }
 
+        GetComponent<AudioSource>().Play();
+    }
 }

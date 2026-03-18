@@ -1,4 +1,3 @@
 repository "Mi juego 3D/Mi juego 3D@6872782883844@cloud"
   path "/"
-    br "/main"
-    co "/main"
+    smartbranch "/main"

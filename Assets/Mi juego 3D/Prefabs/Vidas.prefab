@@ -100,7 +100,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ControlExtras
   tipo: 0
-  cantidad: 0
+  cantidad: 2
 --- !u!114 &757868001915144391
 MonoBehaviour:
   m_ObjectHideFlags: 0
